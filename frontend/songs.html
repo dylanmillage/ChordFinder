@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Songs — ChordFinder</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/favicon-32.png" sizes="32x32">
+<meta name="theme-color" content="#0f1014">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ChordFinder">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1014;
+    --panel: #17181f;
+    --panel-2: #1e2028;
+    --border: #2a2d38;
+    --text: #e2e4ea;
+    --dim: #7a7f8f;
+    --accent: #ffb454;
+    --accent-dim: #ffb45433;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", system-ui, sans-serif;
+    max-width: 1500px;
+    margin: 0 auto;
+    padding: 0 1rem 5rem;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+    padding: 1.1rem 0 0.8rem;
+    flex-wrap: wrap;
+  }
+  .brand { font-weight: 800; font-size: 1.05rem; letter-spacing: 0.02em; color: var(--accent); }
+  .tabs { display: flex; gap: 0.4rem; }
+  .tab {
+    color: var(--dim);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.92rem;
+    padding: 0.3rem 0.85rem;
+    border-radius: 7px;
+    border: 1px solid transparent;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-color: var(--accent); }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem;
+  }
+  input, select, button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 0.42rem 0.65rem;
+    font: inherit;
+    font-size: 0.88rem;
+  }
+  input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  button { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #14151a; font-weight: 700; }
+  h2 { font-size: 1rem; margin: 0 0 0.6rem; }
+
+  #layout { display: grid; grid-template-columns: 1fr; gap: 1.2rem; }
+  @media (min-width: 1000px) {
+    #layout { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
+    #playlists-col { position: sticky; top: 0.8rem; }
+  }
+
+  /* ---- filters ---- */
+  #filters { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; margin-bottom: 0.5rem; }
+  #filters label { color: var(--dim); font-size: 0.82rem; }
+  #search { flex: 1 1 200px; min-width: 150px; }
+  #chord-filter { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0 0.2rem; align-items: center; }
+  .chord-chip {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--dim);
+    cursor: pointer;
+    user-select: none;
+    background: var(--panel-2);
+  }
+  .chord-chip:hover { color: var(--text); }
+  .chord-chip.on { background: var(--accent); border-color: var(--accent); color: #14151a; }
+  #chord-mode { font-size: 0.82rem; }
+  #result-count { color: var(--dim); font-size: 0.85rem; margin: 0.5rem 0.1rem; }
+
+  /* ---- song rows ---- */
+  .song {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    margin-bottom: 0.5rem;
+    background: var(--panel);
+  }
+  .song.notready { opacity: 0.55; }
+  .song-main { flex: 1 1 auto; min-width: 0; }
+  .song-title { font-weight: 600; }
+  .song-title a { color: inherit; text-decoration: none; }
+  .song-title a:hover { color: var(--accent); }
+  .song-sub { color: var(--dim); font-size: 0.82rem; margin-top: 0.15rem; }
+  .song-chords { display: flex; flex-wrap: wrap; gap: 0.22rem; margin-top: 0.35rem; }
+  .mini-chord { font-size: 0.72rem; color: var(--accent); background: var(--accent-dim); border-radius: 4px; padding: 0.02rem 0.32rem; font-weight: 600; }
+  .mini-chord.match { outline: 1px solid var(--accent); }
+  .song-actions { display: flex; gap: 0.35rem; flex: 0 0 auto; }
+  .song-actions button { padding: 0.32rem 0.55rem; font-size: 0.82rem; }
+  .badge-capo { color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 0.4rem; font-size: 0.72rem; font-weight: 700; }
+
+  /* ---- playlists ---- */
+  .playlist { border: 1px solid var(--border); border-radius: 9px; padding: 0.6rem 0.7rem; margin-bottom: 0.6rem; background: var(--panel-2); }
+  .playlist-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .playlist-name { font-weight: 700; }
+  .playlist-count { color: var(--dim); font-size: 0.8rem; }
+  .playlist-actions { display: flex; gap: 0.3rem; margin-top: 0.5rem; flex-wrap: wrap; }
+  .playlist-actions button { padding: 0.28rem 0.55rem; font-size: 0.8rem; }
+  .playlist-songs { margin-top: 0.5rem; }
+  .pl-song { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.84rem; padding: 0.18rem 0; color: var(--dim); }
+  .pl-song button { border: none; background: none; color: var(--dim); padding: 0 0.2rem; }
+  .pl-song button:hover { color: var(--accent); }
+  #new-playlist-row { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
+  #new-playlist-row input { flex: 1; }
+  #queue-info { color: var(--accent); font-size: 0.85rem; margin-top: 0.5rem; }
+
+  /* add-to-playlist popover */
+  #pl-menu { position: absolute; z-index: 80; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 0.3rem; min-width: 170px; box-shadow: 0 8px 26px #000a; }
+  #pl-menu div { padding: 0.35rem 0.55rem; border-radius: 5px; cursor: pointer; font-size: 0.86rem; }
+  #pl-menu div:hover { background: var(--accent-dim); }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">ChordFinder</div>
+    <nav class="tabs">
+      <a href="player.html" class="tab">Player</a>
+      <a href="songs.html" class="tab active">Songs</a>
+    </nav>
+  </header>
+
+  <div id="layout">
+    <div id="songs-col">
+      <div class="card">
+        <div id="filters">
+          <input id="search" type="text" placeholder="Search title or artist…">
+          <label>Artist
+            <select id="artist-filter"><option value="">All</option></select>
+          </label>
+          <label>Capo
+            <select id="capo-filter"><option value="">All</option></select>
+          </label>
+          <label>Sort
+            <select id="sort">
+              <option value="artist">Artist</option>
+              <option value="title">Title</option>
+              <option value="capo">Capo</option>
+              <option value="duration">Length</option>
+            </select>
+          </label>
+        </div>
+        <div id="chord-filter"></div>
+        <div id="result-count"></div>
+      </div>
+      <div id="song-list"></div>
+    </div>
+
+    <div id="playlists-col">
+      <div class="card">
+        <h2>Queue</h2>
+        <div id="queue-summary" style="color: var(--dim); font-size: 0.86rem;"></div>
+        <div class="playlist-actions">
+          <button id="play-queue" class="primary">▶ Play queue</button>
+          <button id="shuffle-queue">🔀 Shuffle &amp; play</button>
+          <button id="clear-queue">Clear</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 1rem;">
+        <h2>Playlists</h2>
+        <div id="playlist-list"></div>
+        <div id="new-playlist-row">
+          <input id="new-playlist-name" type="text" placeholder="New playlist name…">
+          <button id="create-playlist">Create</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="firebase-config.js"></script>
+<script src="cloud.js"></script>
+<script>
+const QUEUE_KEY = "cf-queue";
+const PLAYLIST_KEY = "cf-playlists";
+let songs = [];
+let byId = {};
+
+function readJSON(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+}
+function fmtDur(s) {
+  if (!s) return "";
+  const m = Math.floor(s / 60), sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+function songDisplayTitle(s) {
+  let t = s.title;
+  if (s.artist && t.toLowerCase().startsWith(s.artist.toLowerCase() + " - "))
+    t = t.slice(s.artist.length + 3);
+  return t;
+}
+
+// ---- queue (shared with player via localStorage) ----
+function getQueue() { return readJSON(QUEUE_KEY, []); }
+function setQueue(q) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); renderQueueSummary(); }
+function queueAdd(vid) { const q = getQueue(); q.push(vid); setQueue(q); }
+
+function renderQueueSummary() {
+  const q = getQueue().filter(v => byId[v]);
+  const el = document.getElementById("queue-summary");
+  el.textContent = q.length
+    ? `${q.length} song${q.length > 1 ? "s" : ""}: ` + q.map(v => songDisplayTitle(byId[v])).join(", ")
+    : "Queue is empty. Add songs below, or hit ▶ next to any song.";
+}
+
+// Play an ordered list of video ids: first opens in the player, the rest
+// go into the queue the player already drains on song-end.
+function playList(ids) {
+  ids = ids.filter(v => byId[v] && byId[v].ready);
+  if (!ids.length) { alert("None of those songs are processed yet."); return; }
+  setQueue(ids.slice(1));
+  location.href = `player.html?v=${ids[0]}&autoplay=1`;
+}
+function shuffle(a) {
+  a = a.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+document.getElementById("play-queue").addEventListener("click", () => {
+  const q = getQueue().filter(v => byId[v] && byId[v].ready);
+  if (!q.length) { alert("Queue is empty."); return; }
+  playList(q);
+});
+document.getElementById("shuffle-queue").addEventListener("click", () => {
+  const q = getQueue().filter(v => byId[v] && byId[v].ready);
+  if (!q.length) { alert("Queue is empty."); return; }
+  playList(shuffle(q));
+});
+document.getElementById("clear-queue").addEventListener("click", () => { setQueue([]); });
+
+// ---- playlists ----
+function getPlaylists() { return readJSON(PLAYLIST_KEY, []); }
+function setPlaylists(p) { localStorage.setItem(PLAYLIST_KEY, JSON.stringify(p)); renderPlaylists(); }
+
+function renderPlaylists() {
+  const wrap = document.getElementById("playlist-list");
+  wrap.replaceChildren();
+  const lists = getPlaylists();
+  if (!lists.length) {
+    const empty = document.createElement("div");
+    empty.style.color = "var(--dim)";
+    empty.style.fontSize = "0.85rem";
+    empty.textContent = "No playlists yet.";
+    wrap.appendChild(empty);
+  }
+  lists.forEach((pl, idx) => {
+    const box = document.createElement("div");
+    box.className = "playlist";
+    const head = document.createElement("div");
+    head.className = "playlist-head";
+    const name = document.createElement("span");
+    name.className = "playlist-name";
+    name.textContent = pl.name;
+    const count = document.createElement("span");
+    count.className = "playlist-count";
+    count.textContent = `${pl.ids.length} song${pl.ids.length === 1 ? "" : "s"}`;
+    head.append(name, count);
+    box.appendChild(head);
+
+    const songsWrap = document.createElement("div");
+    songsWrap.className = "playlist-songs";
+    pl.ids.forEach((vid, i) => {
+      const row = document.createElement("div");
+      row.className = "pl-song";
+      const s = byId[vid];
+      const label = document.createElement("span");
+      label.textContent = s ? songDisplayTitle(s) : vid;
+      const rm = document.createElement("button");
+      rm.textContent = "✕";
+      rm.title = "Remove from playlist";
+      rm.addEventListener("click", () => {
+        pl.ids.splice(i, 1); setPlaylists(lists);
+      });
+      row.append(label, rm);
+      songsWrap.appendChild(row);
+    });
+    box.appendChild(songsWrap);
+
+    const actions = document.createElement("div");
+    actions.className = "playlist-actions";
+    const play = document.createElement("button");
+    play.className = "primary";
+    play.textContent = "▶ Play";
+    play.addEventListener("click", () => playList(pl.ids));
+    const shuf = document.createElement("button");
+    shuf.textContent = "🔀 Shuffle";
+    shuf.addEventListener("click", () => playList(shuffle(pl.ids)));
+    const enq = document.createElement("button");
+    enq.textContent = "+ Queue";
+    enq.title = "Append this playlist to the queue";
+    enq.addEventListener("click", () => {
+      const q = getQueue();
+      pl.ids.forEach(v => q.push(v));
+      setQueue(q);
+    });
+    const del = document.createElement("button");
+    del.textContent = "Delete";
+    del.addEventListener("click", () => {
+      if (confirm(`Delete playlist "${pl.name}"?`)) { lists.splice(idx, 1); setPlaylists(lists); }
+    });
+    actions.append(play, shuf, enq, del);
+    box.appendChild(actions);
+    wrap.appendChild(box);
+  });
+}
+
+document.getElementById("create-playlist").addEventListener("click", () => {
+  const input = document.getElementById("new-playlist-name");
+  const nm = input.value.trim();
+  if (!nm) return;
+  const lists = getPlaylists();
+  lists.push({ name: nm, ids: [] });
+  setPlaylists(lists);
+  input.value = "";
+});
+
+// add-to-playlist popover
+let plMenu = null;
+function openPlaylistMenu(vid, anchor) {
+  closePlaylistMenu();
+  const lists = getPlaylists();
+  plMenu = document.createElement("div");
+  plMenu.id = "pl-menu";
+  if (!lists.length) {
+    const d = document.createElement("div");
+    d.textContent = "Create a playlist first";
+    d.style.color = "var(--dim)";
+    plMenu.appendChild(d);
+  }
+  lists.forEach(pl => {
+    const d = document.createElement("div");
+    const has = pl.ids.includes(vid);
+    d.textContent = (has ? "✓ " : "+ ") + pl.name;
+    d.addEventListener("click", () => {
+      if (!has) { pl.ids.push(vid); setPlaylists(lists); }
+      closePlaylistMenu();
+    });
+    plMenu.appendChild(d);
+  });
+  document.body.appendChild(plMenu);
+  const r = anchor.getBoundingClientRect();
+  plMenu.style.top = (r.bottom + scrollY + 4) + "px";
+  plMenu.style.left = Math.min(r.left + scrollX, scrollX + innerWidth - 190) + "px";
+}
+function closePlaylistMenu() { if (plMenu) { plMenu.remove(); plMenu = null; } }
+document.addEventListener("click", e => {
+  if (plMenu && !e.target.closest("#pl-menu") && !e.target.closest(".add-pl-btn")) closePlaylistMenu();
+});
+
+// ---- filters + song list ----
+const selectedChords = new Set();
+
+function buildFilterControls() {
+  const artists = [...new Set(songs.map(s => s.artist).filter(Boolean))].sort();
+  const artistSel = document.getElementById("artist-filter");
+  artists.forEach(a => {
+    const o = document.createElement("option"); o.value = a; o.textContent = a; artistSel.appendChild(o);
+  });
+  const capos = [...new Set(songs.map(s => s.capo || 0))].sort((a, b) => a - b);
+  const capoSel = document.getElementById("capo-filter");
+  capos.forEach(c => {
+    const o = document.createElement("option"); o.value = String(c);
+    o.textContent = c === 0 ? "No capo" : `Capo ${c}`; capoSel.appendChild(o);
+  });
+  // chord chips: every chord used across the library
+  const allChords = [...new Set(songs.flatMap(s => s.chords || []))];
+  allChords.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const cf = document.getElementById("chord-filter");
+  const lbl = document.createElement("span");
+  lbl.style.color = "var(--dim)"; lbl.style.fontSize = "0.82rem"; lbl.textContent = "Chords:";
+  cf.appendChild(lbl);
+  allChords.forEach(ch => {
+    const chip = document.createElement("span");
+    chip.className = "chord-chip"; chip.textContent = ch;
+    chip.addEventListener("click", () => {
+      chip.classList.toggle("on");
+      if (selectedChords.has(ch)) selectedChords.delete(ch); else selectedChords.add(ch);
+      renderSongs();
+    });
+    cf.appendChild(chip);
+  });
+  const mode = document.createElement("select");
+  mode.id = "chord-mode";
+  mode.innerHTML = `<option value="has">song contains all selected</option>` +
+                   `<option value="only">song uses only selected (playable)</option>`;
+  mode.addEventListener("change", renderSongs);
+  cf.appendChild(mode);
+  const clear = document.createElement("span");
+  clear.className = "chord-chip"; clear.textContent = "clear";
+  clear.addEventListener("click", () => {
+    selectedChords.clear();
+    document.querySelectorAll(".chord-chip.on").forEach(c => c.classList.remove("on"));
+    renderSongs();
+  });
+  cf.appendChild(clear);
+}
+
+function filteredSongs() {
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const artist = document.getElementById("artist-filter").value;
+  const capo = document.getElementById("capo-filter").value;
+  const sort = document.getElementById("sort").value;
+  const mode = document.getElementById("chord-mode")?.value || "has";
+  let list = songs.filter(s => {
+    if (q && !`${s.artist} ${s.title}`.toLowerCase().includes(q)) return false;
+    if (artist && s.artist !== artist) return false;
+    if (capo !== "" && String(s.capo || 0) !== capo) return false;
+    if (selectedChords.size) {
+      const cs = new Set(s.chords || []);
+      if (mode === "has") { for (const c of selectedChords) if (!cs.has(c)) return false; }
+      else { for (const c of cs) if (!selectedChords.has(c)) return false; }
+    }
+    return true;
+  });
+  const cmp = {
+    artist: (a, b) => (a.artist || "").localeCompare(b.artist || "") || songDisplayTitle(a).localeCompare(songDisplayTitle(b)),
+    title: (a, b) => songDisplayTitle(a).localeCompare(songDisplayTitle(b)),
+    capo: (a, b) => (a.capo || 0) - (b.capo || 0),
+    duration: (a, b) => (a.duration || 0) - (b.duration || 0),
+  }[sort];
+  return list.sort(cmp);
+}
+
+function renderSongs() {
+  const list = filteredSongs();
+  document.getElementById("result-count").textContent =
+    `${list.length} of ${songs.length} songs`;
+  const wrap = document.getElementById("song-list");
+  wrap.replaceChildren();
+  list.forEach(s => {
+    const row = document.createElement("div");
+    row.className = "song" + (s.ready ? "" : " notready");
+
+    const main = document.createElement("div");
+    main.className = "song-main";
+    const title = document.createElement("div");
+    title.className = "song-title";
+    if (s.ready) {
+      const a = document.createElement("a");
+      a.href = `player.html?v=${s.video_id}`;
+      a.textContent = songDisplayTitle(s);
+      title.appendChild(a);
+    } else {
+      title.textContent = songDisplayTitle(s);
+    }
+    if (s.capo) {
+      const b = document.createElement("span");
+      b.className = "badge-capo"; b.textContent = `CAPO ${s.capo}`;
+      b.style.marginLeft = "0.5rem";
+      title.appendChild(b);
+    }
+    if (s.imported) {
+      const b = document.createElement("span");
+      b.className = "badge-capo";
+      b.style.marginLeft = "0.5rem";
+      b.style.color = "#8fd694";
+      b.style.borderColor = "#8fd69466";
+      b.textContent = "UG ✓";
+      b.title = "Chords imported from a chord sheet";
+      title.appendChild(b);
+    }
+    main.appendChild(title);
+
+    const sub = document.createElement("div");
+    sub.className = "song-sub";
+    sub.textContent = [s.artist, fmtDur(s.duration), s.ready ? "" : (s.state || "not processed")]
+      .filter(Boolean).join(" · ");
+    main.appendChild(sub);
+
+    if (s.chords && s.chords.length) {
+      const cw = document.createElement("div");
+      cw.className = "song-chords";
+      s.chords.forEach(ch => {
+        const c = document.createElement("span");
+        c.className = "mini-chord" + (selectedChords.has(ch) ? " match" : "");
+        c.textContent = ch;
+        cw.appendChild(c);
+      });
+      main.appendChild(cw);
+    }
+    row.appendChild(main);
+
+    const actions = document.createElement("div");
+    actions.className = "song-actions";
+    if (s.ready) {
+      const play = document.createElement("button");
+      play.textContent = "▶";
+      play.title = "Play now";
+      play.addEventListener("click", () => location.href = `player.html?v=${s.video_id}&autoplay=1`);
+      const q = document.createElement("button");
+      q.textContent = "+ Queue";
+      q.addEventListener("click", () => { queueAdd(s.video_id); q.textContent = "✓ Queued"; setTimeout(() => q.textContent = "+ Queue", 1200); });
+      const pl = document.createElement("button");
+      pl.textContent = "+ List";
+      pl.className = "add-pl-btn";
+      pl.title = "Add to a playlist";
+      pl.addEventListener("click", () => openPlaylistMenu(s.video_id, pl));
+      actions.append(play, q, pl);
+    }
+    row.appendChild(actions);
+    wrap.appendChild(row);
+  });
+}
+
+["search", "artist-filter", "capo-filter", "sort"].forEach(id =>
+  document.getElementById(id).addEventListener("input", renderSongs));
+
+// re-sync queue/playlists if changed in the other tab
+window.addEventListener("storage", e => {
+  if (e.key === QUEUE_KEY) renderQueueSummary();
+  if (e.key === PLAYLIST_KEY) renderPlaylists();
+});
+
+// Force the default view: all songs, no filters, sorted by artist. Browsers
+// otherwise restore the sort/filter controls (and bfcache restores the whole
+// page) to whatever you last left active, so assert defaults explicitly.
+function resetToDefault() {
+  document.getElementById("search").value = "";
+  document.getElementById("artist-filter").value = "";
+  document.getElementById("capo-filter").value = "";
+  document.getElementById("sort").value = "artist";
+  const mode = document.getElementById("chord-mode");
+  if (mode) mode.value = "has";
+  selectedChords.clear();
+  document.querySelectorAll(".chord-chip.on").forEach(c => c.classList.remove("on"));
+  renderSongs();
+}
+
+async function boot() {
+  await DS.init();
+  songs = await DS.listSongs(true);
+  byId = Object.fromEntries(songs.map(s => [s.video_id, s]));
+  buildFilterControls();
+  resetToDefault();
+  renderPlaylists();
+  renderQueueSummary();
+}
+boot();
+
+// Returning via the back button can restore this page from the bfcache
+// without re-running boot(); reset the filters so the default is consistent.
+window.addEventListener("pageshow", e => {
+  if (e.persisted && songs.length) resetToDefault();
+});
+</script>
+</body>
+</html>

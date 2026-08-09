@@ -1,0 +1,50 @@
+rules_version = '2';
+
+// ACCESS MODEL: anyone signed in with a Google account can READ the library.
+// Sharing is therefore controlled by who you give the URL to - there is no
+// per-person allowlist. Sign-in is still required, which keeps the library
+// out of search engines and away from scrapers/bots.
+//
+// To go back to a private allowlist, restore the email check:
+//     && request.auth.token.email in ['you@example.com']
+//
+// Nothing is writable from a browser: the PC publishes with the Admin SDK
+// (pipeline/publish.py), which bypasses these rules entirely.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null
+          && request.auth.token.email_verified == true;
+    }
+
+    // Reads are open to anyone you share the link with; WRITES are not.
+    // Only the owner can import a chord sheet from a phone/tablet, so people
+    // you share with can't alter the library.
+    function isOwner() {
+      return isSignedIn()
+          && request.auth.token.email in [
+               'dylan.millage@gmail.com'
+             ];
+    }
+
+    match /songs/{songId} {
+      allow read: if isSignedIn();
+      // Only the fields the hosted import writes; everything else is
+      // published from the PC by the Admin SDK.
+      allow update: if isOwner()
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['words', 'chords', 'chord_segments',
+                         'imported', 'edited_in_cloud']);
+      allow create, delete: if false;
+    }
+
+    match /library/{doc} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

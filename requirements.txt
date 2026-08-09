@@ -1,0 +1,4 @@
+# Install into a venv OUTSIDE the OneDrive folder (see README).
+# CPU-only torch is pulled in automatically by whisperx on Windows.
+yt-dlp
+whisperx

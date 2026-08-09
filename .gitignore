@@ -1,0 +1,24 @@
+# Downloaded audio is large and re-creatable; keep the JSON outputs.
+songs/*/audio.*
+__pycache__/
+.venv/
+
+# Firebase: the service account key is a real secret - never commit it.
+cloud/serviceAccountKey.json
+cloud/public/
+cloud/published.json
+cloud/.firebase/
+
+# Third-party chord model (35 MB of weights + a sample mp3). Not ours to
+# redistribute; re-create with the clone command in the README.
+vendor/
+
+# Backups left behind by re-runs of the pipeline
+songs/*/*.backup.json
+songs/*/chords.madmom.json
+
+# Editor/tooling config
+.claude/
+
+# Per-song data (transcribed lyrics) stays local - not for a public repo.
+songs/

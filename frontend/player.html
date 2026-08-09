@@ -1,0 +1,1735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChordFinder</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/favicon-32.png" sizes="32x32">
+<meta name="theme-color" content="#0f1014">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ChordFinder">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1014;
+    --panel: #17181f;
+    --panel-2: #1e2028;
+    --border: #2a2d38;
+    --text: #e2e4ea;
+    --dim: #7a7f8f;
+    --accent: #ffb454;
+    --accent-dim: #ffb45433;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", system-ui, sans-serif;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 1rem 5rem;
+  }
+  /* Narrow / stacked layout: the column wrappers vanish so the sticky
+     player works against the page, exactly like the single-column design. */
+  #main, #left-col, #right-col { display: contents; }
+  /* Wide layout: sticky player column left, lyrics right. */
+  @media (min-width: 1100px) {
+    body { max-width: 1500px; }
+    #main {
+      display: grid;
+      grid-template-columns: minmax(400px, 640px) minmax(0, 1fr);
+      gap: 1.7rem;
+      align-items: start;
+    }
+    #left-col { display: block; position: sticky; top: 0.8rem; }
+    #right-col { display: block; min-width: 0; }
+    #player-wrap { position: static; padding: 0; }
+    #lyrics { font-size: 1.2rem; }
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.1rem 0 0.6rem;
+    flex-wrap: wrap;
+  }
+  .brand { font-weight: 800; font-size: 1.05rem; letter-spacing: 0.02em; color: var(--accent); }
+  .tabs { display: flex; gap: 0.4rem; }
+  .tab {
+    color: var(--dim);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.92rem;
+    padding: 0.3rem 0.85rem;
+    border-radius: 7px;
+    border: 1px solid transparent;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-color: var(--accent); }
+  #song-title { font-weight: 700; font-size: 1.05rem; text-align: right; }
+  #song-title small { display: block; color: var(--dim); font-weight: 400; font-size: 0.8rem; }
+
+  /* ---- controls / cards ---- */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.7rem;
+  }
+  #topbar { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  input, select, button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 0.42rem 0.65rem;
+    font: inherit;
+    font-size: 0.88rem;
+  }
+  input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  button { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent); border-color: var(--accent); color: #14151a; font-weight: 700; }
+  #song-picker { position: relative; flex: 1 1 280px; min-width: 180px; max-width: 520px; }
+  #song-search { width: 100%; }
+  #song-results {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    right: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-height: 55vh;
+    overflow-y: auto;
+    z-index: 60;
+    box-shadow: 0 12px 32px #000c;
+  }
+  .result-artist {
+    padding: 0.55rem 0.85rem 0.15rem;
+    color: var(--dim);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .result-song {
+    padding: 0.42rem 0.85rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    font-size: 0.92rem;
+  }
+  .result-song:hover { background: var(--accent-dim); color: #fff; }
+  .result-song.current { color: var(--accent); font-weight: 600; }
+  .result-song.disabled { color: var(--dim); cursor: default; }
+  .result-song.disabled:hover { background: none; color: var(--dim); }
+  .result-song .tag { color: var(--dim); font-size: 0.8rem; white-space: nowrap; }
+  .result-empty { padding: 0.6rem 0.85rem; color: var(--dim); font-size: 0.9rem; }
+  #topbar .spacer { flex: 1 0 0; }
+  #open-add-modal { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  #add-status { color: var(--dim); font-size: 0.88rem; margin: 0.35rem 0.15rem; }
+  #add-status a { color: var(--accent); }
+  #add-status > div { margin: 0.3rem 0; }
+  .job-head { display: flex; justify-content: space-between; gap: 0.8rem; }
+  .job-head .pct { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .job-bar {
+    height: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 0.22rem;
+  }
+  .job-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width 0.4s ease;
+  }
+  /* Waiting jobs: no meaningful percentage yet, so show a moving stripe. */
+  .job-fill.waiting {
+    width: 100% !important;
+    background: repeating-linear-gradient(90deg,
+      var(--border) 0 10px, var(--panel-2) 10px 20px);
+    animation: job-slide 1.1s linear infinite;
+  }
+  @keyframes job-slide { to { background-position: 20px 0; } }
+
+  /* ---- add-songs modal ---- */
+  #modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: #000b;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #modal-backdrop[hidden] { display: none; }
+  #import-backdrop {
+    position: fixed;
+    inset: 0;
+    background: #000b;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #import-backdrop[hidden] { display: none; }
+  /* Column layout with a scrolling middle so the action buttons are always
+     reachable, however long the preview gets or however short the window. */
+  #import-modal {
+    width: min(640px, 94vw);
+    padding: 1.1rem 1.2rem;
+    max-height: 94vh;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  #import-modal h3 { margin: 0 0 0.8rem; flex: 0 0 auto; }
+  #import-modal #import-text { flex: 0 1 auto; min-height: 4rem; }
+  #import-modal .modal-actions { flex: 0 0 auto; }
+  #import-text {
+    width: 100%;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 0.82rem;
+    white-space: pre;
+    resize: vertical;
+  }
+  #import-report { color: var(--dim); font-size: 0.86rem; margin-top: 0.6rem; line-height: 1.5;
+                   flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+  #import-report b { color: var(--accent); }
+  #import-report .warn { color: #e06c75; }
+  #import-preview-sheet {
+    max-height: 34vh;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 0.5rem 0.7rem;
+    margin-top: 0.55rem;
+    background: var(--bg);
+  }
+  #import-preview-sheet .p-line { margin: 0.35rem 0; line-height: 1.35; color: var(--text); }
+  #import-preview-sheet .p-word { display: inline-block; padding: 0.95em 0.16em 0; position: relative; font-size: 0.92rem; }
+  #import-preview-sheet .p-chord {
+    position: absolute;
+    top: 0;
+    left: 0.16em;
+    font-size: 0.7em;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  #add-modal {
+    width: min(580px, 93vw);
+    padding: 1.1rem 1.2rem;
+    max-height: 94vh;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  #add-modal h3 { margin: 0 0 0.9rem; flex: 0 0 auto; }
+  #add-rows { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+  #add-modal .modal-actions, #add-modal .modal-hint, #add-row-btn { flex: 0 0 auto; }
+  .add-row { display: flex; gap: 0.45rem; margin-bottom: 0.5rem; align-items: flex-end; }
+  .add-row input[type=text] { flex: 1; }
+  .add-row .capo-field {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--dim);
+    text-transform: uppercase;
+  }
+  .add-row input[type=number] { width: 4.4rem; }
+  .add-row .remove-row { padding: 0.42rem 0.6rem; color: var(--dim); }
+  .add-row .remove-row:hover { color: var(--accent); }
+  .modal-hint { color: var(--dim); font-size: 0.82rem; margin-top: 0.7rem; line-height: 1.45; }
+  .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+
+  /* ---- queue ---- */
+  details { margin: 0.6rem 0; }
+  details > summary {
+    cursor: pointer;
+    color: var(--dim);
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 0.25rem 0.15rem;
+    user-select: none;
+    list-style-position: inside;
+  }
+  details > summary:hover { color: var(--text); }
+  #ug-link { color: var(--dim); font-size: 0.8rem; margin-left: 0.6rem; text-decoration: none; }
+  #ug-link:hover { color: var(--accent); }
+  #queue-items { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; }
+  .queue-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.25rem 0.4rem 0.25rem 0.8rem;
+    font-size: 0.85rem;
+  }
+  .queue-pill .n { color: var(--accent); font-weight: 700; }
+  .queue-pill button { border: none; background: none; color: var(--dim); padding: 0 0.3rem; font-size: 1rem; }
+  .queue-pill button:hover { color: var(--accent); }
+  #queue-add-row { display: flex; gap: 0.45rem; margin-top: 0.55rem; flex-wrap: wrap; }
+  #queue-status { color: var(--accent); font-size: 0.9rem; font-weight: 600; margin-left: 0.6rem; }
+  #queue-status button { margin-left: 0.5rem; padding: 0.1rem 0.6rem; font-size: 0.8rem; }
+
+  /* ---- player area ---- */
+  #player-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg);
+    padding: 0.6rem 0 0.45rem;
+  }
+  #player-frame {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.6rem 0.45rem;
+  }
+  #player-wrap iframe {
+    /* capped by width AND viewport height so the sticky player never
+       swallows the lyric area on short windows */
+    width: min(640px, 100%, calc(45vh * 16 / 9));
+    aspect-ratio: 16 / 9;
+    height: auto;
+    border-radius: 6px;
+    display: block;
+    margin: 0 auto;
+  }
+  #toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 0.4rem; }
+  #toolbar-left { display: flex; align-items: center; gap: 0.9rem; min-height: 2.7rem; }
+  #current-chord { font-size: 1.9rem; font-weight: 800; color: var(--accent); min-width: 2ch; }
+  #next-chord { font-size: 0.9rem; color: var(--dim); line-height: 1.2; }
+  #next-chord b { color: var(--text); font-weight: 700; }
+  #next-chord .secs { color: var(--accent); font-variant-numeric: tabular-nums; }
+  #capo-note {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    padding: 0.12rem 0.55rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  #capo-note.none { color: var(--dim); border-color: var(--border); }
+  #capo-note:hover { color: var(--accent); border-color: var(--accent); }
+  #ug-badge {
+    color: #8fd694;
+    border: 1px solid #8fd69466;
+    border-radius: 5px;
+    padding: 0.12rem 0.55rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  /* ---- strumming pattern ---- */
+  #strum-body { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .strum-row { display: flex; gap: 0.3rem; }
+  .strum-slot {
+    text-align: center;
+    min-width: 1.75rem;
+    border-radius: 6px;
+    padding: 0.15rem 0.1rem 0.25rem;
+    user-select: none;
+  }
+  .strum-slot .arr { font-size: 1.3rem; font-weight: 800; color: var(--accent); line-height: 1.5rem; }
+  .strum-slot.rest .arr { color: #3a3d4a; }
+  .strum-slot .beat { color: var(--dim); font-size: 0.78rem; margin-top: 0.1rem; }
+  .strum-slot:nth-child(odd) { border-bottom: 2px solid var(--border); }
+  .strum-slot:nth-child(even) { border-bottom: 2px solid var(--border); }
+  .strum-row.editable .strum-slot { cursor: pointer; border: 1px solid var(--border); border-bottom: 2px solid var(--border); }
+  .strum-row.editable .strum-slot:hover { border-color: var(--accent); }
+  .strum-meta { color: var(--dim); font-size: 0.9rem; }
+  #strum-body input[type=number] { width: 4.6rem; }
+  #strum-body button { padding: 0.3rem 0.7rem; font-size: 0.84rem; }
+  #edit-hint { display: none; color: var(--dim); font-size: 0.84rem; margin-top: 0.3rem; }
+  body.editing #edit-hint { display: block; }
+
+  /* ---- chord strip ---- */
+  #chord-strip { display: flex; gap: 0.6rem; overflow-x: auto; padding: 0.4rem 0.1rem 0.5rem; }
+  .chord-card {
+    flex: 0 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.45rem 0.55rem 0.25rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .chord-card:hover { border-color: var(--accent); }
+  .chord-card.now { border-color: var(--accent); background: var(--panel-2); }
+  .chord-card .cname { color: var(--accent); font-weight: 700; font-size: 0.95rem; margin-bottom: 0.15rem; }
+  .chord-card .unknown { color: var(--dim); font-size: 0.75rem; padding: 1.4rem 0.2rem; max-width: 5.5rem; }
+
+  /* ---- lyrics ---- */
+  #status { color: var(--dim); margin: 1rem 0.2rem; }
+  #lyrics { font-size: 1.14rem; padding: 0.4rem 0.2rem; }
+  .line { margin: 0.42rem 0; line-height: 1.4; }
+  .word {
+    display: inline-block;
+    position: relative;
+    padding: 1.05em 0.18em 0.1em;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .word:hover { color: #fff; }
+  /* Instrumental ♪ marks: chord label in-flow (not absolute) so long names
+     like Dsus4 can't overlap the neighbouring marks. */
+  .word.instrumental { color: var(--dim); padding-top: 0.1em; text-align: center; }
+  .word.instrumental .chord { position: static; display: block; }
+  .chord {
+    position: absolute;
+    top: 0;
+    left: 0.18em;
+    font-size: 0.72em;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .word.active { background: var(--accent-dim); color: #fff; font-weight: 700; }
+  .chord.placeholder { color: #3a3d4a; }
+  body.editing .word:hover { outline: 1px dashed var(--accent); outline-offset: 1px; }
+  body.editing .chord.placeholder:hover { color: var(--accent); }
+  .inline-edit {
+    font: inherit;
+    background: var(--panel-2);
+    color: #fff;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: 0 3px;
+  }
+
+  /* ---- chord hover popover ---- */
+  #chord-pop {
+    position: absolute;
+    z-index: 50;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 0.45rem 0.55rem 0.3rem;
+    text-align: center;
+    pointer-events: none;
+    box-shadow: 0 6px 24px #000a;
+  }
+  #chord-pop .cname { color: var(--accent); font-weight: 700; margin-bottom: 0.15rem; }
+
+  footer { color: var(--dim); font-size: 0.8rem; text-align: center; margin-top: 2.2rem; }
+  footer kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 0.35em;
+    font-family: inherit;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">ChordFinder</div>
+    <nav class="tabs">
+      <a href="player.html" class="tab active">Player</a>
+      <a href="songs.html" class="tab">Songs</a>
+    </nav>
+    <div id="song-title"></div>
+  </header>
+
+  <div id="topbar" class="card">
+    <div id="song-picker">
+      <input id="song-search" type="text" placeholder="Search songs…" autocomplete="off">
+      <div id="song-results" hidden></div>
+    </div>
+    <span class="spacer"></span>
+    <button id="open-add-modal">+ Add songs</button>
+  </div>
+  <div id="add-status"></div>
+
+  <div id="modal-backdrop" hidden>
+    <div id="add-modal" class="card">
+      <h3>Add songs</h3>
+      <div id="add-rows"></div>
+      <button id="add-row-btn">+ another song</button>
+      <div class="modal-hint">
+        Paste a YouTube URL (or a search like <i>ytsearch1:artist song</i>).
+        Capo = fret on the recording, 0 if none — chord names come out as the
+        shapes you play. Each song takes a few minutes to process; progress
+        shows under the top bar.
+      </div>
+      <div class="modal-actions">
+        <button id="add-cancel-btn">Cancel</button>
+        <button id="add-submit-btn" class="on">Add songs</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+  <div id="left-col">
+  <div id="player-wrap">
+    <div id="player-frame">
+      <div id="player"></div>
+      <div id="toolbar">
+        <div id="toolbar-left">
+          <div id="current-chord"></div>
+          <div id="next-chord" hidden></div>
+          <button id="capo-note" hidden></button>
+          <span id="ug-badge" hidden
+                title="Chords were imported from a pasted chord sheet (e.g. Ultimate Guitar); the pre-import detection is kept in chords.detected.json">UG ✓</span>
+        </div>
+        <div>
+          <button id="import-open"
+                  title="Paste a chord sheet (e.g. from Ultimate Guitar) - its chords get matched onto this song's lyrics">⇪ Import</button>
+          <button id="simplify-toggle"
+                  title="Map every chord to its basic shape (Em7→Em, Dsus4→D); click again to restore the detailed labels">♭ Simplify</button>
+          <button id="edit-toggle" title="Fix chords and lyrics; saves to the JSON files">✎ Edit</button>
+        </div>
+      </div>
+      <div id="edit-hint">Word: click to edit — empty deletes it, several words split the slot ·
+        Chord: click to rename — empty deletes it, + adds one · Enter saves, Esc cancels</div>
+    </div>
+  </div>
+
+  <details id="chords-panel" open>
+    <summary>Chords in this song
+      <a id="ug-link" target="_blank" rel="noopener"
+         title="Community-verified chords - the closest thing to ground truth">verify on Ultimate Guitar ↗</a>
+    </summary>
+    <div id="chord-strip"></div>
+  </details>
+
+  <details id="strum-panel" open>
+    <summary>Strumming</summary>
+    <div id="strum-body" class="card" style="margin-top: 0.4rem;"></div>
+  </details>
+
+  <details id="queue-panel">
+    <summary>Queue (<span id="queue-count">0</span>)<span id="queue-status"></span></summary>
+    <div class="card" style="margin-top: 0.4rem;">
+      <div id="queue-items"></div>
+      <div id="queue-add-row">
+        <select id="queue-add-select"></select>
+        <button id="queue-add-btn">+ Queue</button>
+        <button id="queue-clear-btn">Clear</button>
+      </div>
+      <div style="color: var(--dim); font-size: 0.8rem; margin-top: 0.5rem;">
+        When a song ends, the next queued song starts after a 5 second countdown.
+      </div>
+    </div>
+  </details>
+  </div><!-- /left-col -->
+
+  <div id="right-col">
+  <div id="status">Loading…</div>
+  <div id="lyrics"></div>
+  </div><!-- /right-col -->
+  </div><!-- /main -->
+
+  <div id="import-backdrop" hidden>
+    <div id="import-modal" class="card">
+      <h3>Import chords from a sheet</h3>
+      <textarea id="import-text" rows="12" spellcheck="false"
+        placeholder="Paste the plain text of a chord sheet here - chord names positioned above lyric lines (the standard Ultimate Guitar layout).&#10;&#10;The sheet's chords get matched onto this song's own lyrics and timing. Your lyrics are kept; only the chords change. Intro/solo sections keep the detected chords."></textarea>
+      <div id="import-report"></div>
+      <div class="modal-actions">
+        <button id="import-cancel">Cancel</button>
+        <button id="import-preview">Preview match</button>
+        <button id="import-apply" class="on" disabled>Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> seek 5s ·
+    click a word to jump there · hover a chord for its shape
+  </footer>
+
+<script src="firebase-config.js"></script>
+<script src="cloud.js"></script>
+<script src="import-sheet.js"></script>
+<script>
+let videoId = new URLSearchParams(location.search).get("v");
+const statusEl = document.getElementById("status");
+const lyricsEl = document.getElementById("lyrics");
+let words = [];        // combined.json contents
+let wordEls = [];      // span per word, same order
+let player = null;
+let playerReady = false;
+let activeIdx = -1;
+let allSongs = [];
+
+// ======================= Chord diagrams =======================
+
+let chordShapes = null;   // frontend/chord-shapes.json, condensed chords-db
+fetch("chord-shapes.json").then(r => r.json()).then(d => { chordShapes = d; buildChordStrip(); });
+
+function chordShape(name) {
+  if (!chordShapes) return null;
+  const m = /^([A-G]#?)(.*)$/.exec(name);
+  if (!m) return null;
+  const byRoot = chordShapes[m[1]];
+  return byRoot ? byRoot[m[2]] || null : null;
+}
+
+// Draws a fret diagram like a chord book: strings vertical, dots on frets,
+// O/X markers above, barre drawn as a bar, "3fr" label up the neck.
+function chordSVG(name, width = 84) {
+  const shape = chordShape(name);
+  if (!shape) return null;
+  const NS = "http://www.w3.org/2000/svg";
+  const strings = 6, fretRows = 4;
+  const w = 60, h = 64, x0 = 10, y0 = 14;   // grid box in viewBox units
+  const sx = w / (strings - 1), sy = h / fretRows;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 80 84");
+  svg.setAttribute("width", width);
+  const add = (tag, attrs, text) => {
+    const el = document.createElementNS(NS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    if (text) el.textContent = text;
+    svg.appendChild(el);
+    return el;
+  };
+  const line = "#3a3f4d", dot = "#ffb454", txt = "#e2e4ea", mute = "#7a7f8f";
+
+  for (let s = 0; s < strings; s++)
+    add("line", { x1: x0 + s * sx, y1: y0, x2: x0 + s * sx, y2: y0 + h,
+                  stroke: line, "stroke-width": 1 });
+  for (let f = 0; f <= fretRows; f++)
+    add("line", { x1: x0, y1: y0 + f * sy, x2: x0 + w, y2: y0 + f * sy,
+                  stroke: line, "stroke-width": 1 });
+  if (shape.baseFret === 1)
+    add("rect", { x: x0 - 0.5, y: y0 - 2.5, width: w + 1, height: 3, fill: txt });
+  else
+    add("text", { x: 78, y: y0 + sy * 0.65, fill: mute, "font-size": 8,
+                  "text-anchor": "end" }, shape.baseFret + "fr");
+
+  // barres first, so dots sit on top
+  (shape.barres || []).forEach(f => {
+    const on = shape.frets.map((fr, i) => fr === f ? i : -1).filter(i => i >= 0);
+    if (on.length > 1)
+      add("rect", { x: x0 + on[0] * sx - 3.5, y: y0 + (f - 0.5) * sy - 3.5,
+                    width: (on[on.length - 1] - on[0]) * sx + 7, height: 7,
+                    rx: 3.5, fill: dot });
+  });
+  shape.frets.forEach((f, s) => {
+    const x = x0 + s * sx;
+    if (f === -1) {
+      add("text", { x, y: y0 - 4, fill: mute, "font-size": 8,
+                    "text-anchor": "middle" }, "✕");
+    } else if (f === 0) {
+      add("circle", { cx: x, cy: y0 - 7, r: 2.8, fill: "none",
+                      stroke: txt, "stroke-width": 1 });
+    } else {
+      add("circle", { cx: x, cy: y0 + (f - 0.5) * sy, r: 4.2, fill: dot });
+    }
+  });
+  return svg;
+}
+
+function chordCard(name, size) {
+  const div = document.createElement("div");
+  div.className = "chord-card";
+  const label = document.createElement("div");
+  label.className = "cname";
+  label.textContent = name;
+  div.appendChild(label);
+  const svg = chordSVG(name, size);
+  if (svg) div.appendChild(svg);
+  else {
+    const u = document.createElement("div");
+    u.className = "unknown";
+    u.textContent = "no diagram";
+    div.appendChild(u);
+  }
+  return div;
+}
+
+function buildChordStrip() {
+  const strip = document.getElementById("chord-strip");
+  strip.replaceChildren();
+  const seen = new Map();   // chord -> first start_time
+  words.forEach(w => { if (w.chord && !seen.has(w.chord)) seen.set(w.chord, w.start_time); });
+  seen.forEach((firstTime, name) => {
+    const card = chordCard(name, 76);
+    card.dataset.chord = name;
+    card.title = "Click to hear this chord's first occurrence";
+    card.addEventListener("click", () => {
+      if (player && playerReady) { player.seekTo(firstTime, true); player.playVideo(); }
+    });
+    strip.appendChild(card);
+  });
+}
+
+// Chord-shape popover: hover on desktop, tap on touch devices.
+const pop = document.createElement("div");
+pop.id = "chord-pop";
+pop.hidden = true;
+document.body.appendChild(pop);
+
+function showChordPop(c) {
+  if (!c || editMode || c.classList.contains("placeholder")) { pop.hidden = true; return; }
+  const svg = chordSVG(c.textContent, 92);
+  if (!svg) { pop.hidden = true; return; }
+  pop.replaceChildren();
+  const label = document.createElement("div");
+  label.className = "cname";
+  label.textContent = c.textContent;
+  pop.append(label, svg);
+  pop.hidden = false;
+  const r = c.getBoundingClientRect();
+  const popW = 120, popH = 150;
+  let left = r.left + scrollX - popW / 2 + r.width / 2;
+  left = Math.max(scrollX + 6, Math.min(left, scrollX + innerWidth - popW));
+  let top = r.top + scrollY - popH;
+  if (r.top < popH + 60) top = r.bottom + scrollY + 8;   // flip below near the top
+  pop.style.left = left + "px";
+  pop.style.top = top + "px";
+}
+
+lyricsEl.addEventListener("mouseover", e => showChordPop(e.target.closest(".chord")));
+lyricsEl.addEventListener("mouseleave", () => { pop.hidden = true; });
+// Touch: a tap anywhere that isn't a chord dismisses the popover.
+document.addEventListener("click", e => {
+  if (!e.target.closest(".chord")) pop.hidden = true;
+});
+window.addEventListener("scroll", () => { pop.hidden = true; }, { passive: true });
+
+// ======================= Song data / switching =======================
+
+async function reloadData() {
+  words = await DS.loadWords(videoId);
+  wordEls = [];
+  activeIdx = -1;
+  lastHudChord = null;   // force the chord readout/strip highlight to re-sync
+  // Chord-change timeline: every entry carrying a chord is a change point,
+  // used for the "next chord in N.Ns" countdown.
+  chordChanges = words.filter(w => w.chord)
+                      .map(w => ({ t: w.start_time, chord: w.chord }));
+  lyricsEl.replaceChildren();
+  render();
+  buildChordStrip();
+  statusEl.hidden = true;
+}
+
+function updateHeader() {
+  const s = allSongs.find(x => x.video_id === videoId);
+  const el = document.getElementById("song-title");
+  el.replaceChildren();
+  if (!s) return;
+  let t = s.title;
+  if (s.artist && t.toLowerCase().startsWith(s.artist.toLowerCase() + " - "))
+    t = t.slice(s.artist.length + 3);
+  el.appendChild(document.createTextNode(t));
+  const small = document.createElement("small");
+  small.textContent = s.artist || "";
+  el.appendChild(small);
+  document.title = `${t} — ChordFinder`;
+  const ug = document.getElementById("ug-link");
+  ug.href = "https://www.ultimate-guitar.com/search.php?search_type=title&value="
+          + encodeURIComponent(`${s.artist || ""} ${t}`.trim());
+  ug.addEventListener("click", e => e.stopPropagation());   // don't toggle the panel
+}
+
+// Switch songs without a page reload so the YouTube player keeps its
+// autoplay permission (needed for the queue) and switching feels instant.
+async function switchSong(vid, { autoplay = false, push = true } = {}) {
+  if (!vid) return;
+  videoId = vid;
+  if (push) history.pushState({ v: vid }, "", `?v=${vid}`);
+  if (editMode) setEditMode(false);
+  window.scrollTo({ top: 0 });   // new song: start reading from the top
+  activeIdx = -1;
+  try {
+    await reloadData();
+  } catch {
+    statusEl.hidden = false;
+    statusEl.textContent = `Couldn't load songs/${vid}/combined.json.`;
+  }
+  buildSongOptions();
+  updateCapoNote();
+  updateHeader();
+  const s = allSongs.find(x => x.video_id === vid);
+  if (s) setSimplifyState(s.simplified);
+  if (player && playerReady)
+    autoplay ? player.loadVideoById(vid) : player.cueVideoById(vid);
+}
+
+window.addEventListener("popstate", () => {
+  const v = new URLSearchParams(location.search).get("v");
+  if (v && v !== videoId) switchSong(v, { push: false });
+});
+
+// ======================= Song list / add =======================
+
+const songSearch = document.getElementById("song-search");
+const songResults = document.getElementById("song-results");
+const addStatus = document.getElementById("add-status");
+
+function songDisplayTitle(s) {
+  let t = s.title;
+  if (s.artist && t.toLowerCase().startsWith(s.artist.toLowerCase() + " - "))
+    t = t.slice(s.artist.length + 3);
+  return t;
+}
+
+// The search box doubles as the song browser: clicking it drops the whole
+// collection down underneath, grouped by artist; typing filters it.
+function buildSongOptions() {
+  const q = songSearch.value.trim().toLowerCase();
+  songResults.replaceChildren();
+  const groups = new Map();
+  allSongs.forEach(s => {
+    if (q && !`${s.artist || ""} ${s.title}`.toLowerCase().includes(q)) return;
+    const key = s.artist || "Other";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(s);
+  });
+  if (!groups.size) {
+    const none = document.createElement("div");
+    none.className = "result-empty";
+    none.textContent = "No matches.";
+    songResults.appendChild(none);
+  }
+  [...groups.keys()].sort((a, b) => a.localeCompare(b)).forEach(artist => {
+    const h = document.createElement("div");
+    h.className = "result-artist";
+    h.textContent = artist;
+    songResults.appendChild(h);
+    groups.get(artist).forEach(s => {
+      const row = document.createElement("div");
+      row.className = "result-song"
+        + (s.video_id === videoId ? " current" : "")
+        + (s.ready ? "" : " disabled");
+      const name = document.createElement("span");
+      name.textContent = songDisplayTitle(s);
+      row.appendChild(name);
+      const tags = [];
+      if (s.capo) tags.push(`capo ${s.capo}`);
+      if (!s.ready) tags.push(s.state || "not processed");
+      if (tags.length) {
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = tags.join(" · ");
+        row.appendChild(tag);
+      }
+      if (s.ready) {
+        row.addEventListener("click", () => {
+          closeResults();
+          songSearch.value = "";
+          switchSong(s.video_id);
+        });
+      }
+      songResults.appendChild(row);
+    });
+  });
+  buildQueueAddOptions();
+}
+
+function openResults() { buildSongOptions(); songResults.hidden = false; }
+function closeResults() { songResults.hidden = true; }
+songSearch.addEventListener("focus", openResults);
+songSearch.addEventListener("click", openResults);
+document.addEventListener("click", e => {
+  if (!e.target.closest("#song-picker")) closeResults();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !songResults.hidden) closeResults();
+});
+
+function updateCapoNote() {
+  const current = allSongs.find(s => s.video_id === videoId);
+  document.getElementById("ug-badge").hidden = !(current && current.imported);
+  renderStrum();
+  const capoNote = document.getElementById("capo-note");
+  if (!current || !current.ready) { capoNote.hidden = true; return; }
+  capoNote.hidden = false;
+  capoNote.classList.toggle("none", !current.capo);
+  if (current.capo) {
+    capoNote.textContent = `CAPO ${current.capo} ✎`;
+    capoNote.title = "Put a capo on this fret - the chord names are the shapes " +
+                     "you play. Click to change the capo (re-detects chords).";
+  } else {
+    capoNote.textContent = "+ CAPO";
+    capoNote.title = "No capo. If this recording is actually capo'd, click to " +
+                     "set the fret - chords are re-detected as playable shapes.";
+  }
+}
+
+// ---- strumming pattern (manually entered) ----
+
+const BEAT_LABELS_8 = ["1", "&", "2", "&", "3", "&", "4", "&"];
+const ARROWS = { D: "↓", U: "↑", "-": "·" };
+const CYCLE = { "-": "D", D: "U", U: "-" };
+
+function strumRow(pattern, editable) {
+  const row = document.createElement("div");
+  row.className = "strum-row" + (editable ? " editable" : "");
+  pattern.forEach((p, i) => {
+    const slot = document.createElement("div");
+    slot.className = "strum-slot" + (p === "-" ? " rest" : "");
+    const arr = document.createElement("div");
+    arr.className = "arr";
+    arr.textContent = ARROWS[p];
+    const beat = document.createElement("div");
+    beat.className = "beat";
+    beat.textContent = BEAT_LABELS_8[i % 8];
+    slot.append(arr, beat);
+    if (editable) {
+      slot.title = "Click: down → up → rest";
+      slot.addEventListener("click", () => {
+        pattern[i] = CYCLE[pattern[i]];
+        arr.textContent = ARROWS[pattern[i]];
+        slot.classList.toggle("rest", pattern[i] === "-");
+      });
+    }
+    row.appendChild(slot);
+  });
+  return row;
+}
+
+function renderStrum() {
+  const body = document.getElementById("strum-body");
+  body.replaceChildren();
+  const s = allSongs.find(x => x.video_id === videoId);
+  const strum = s && s.strum;
+  if (strum && strum.pattern) {
+    body.appendChild(strumRow(strum.pattern, false));
+    if (strum.bpm) {
+      const meta = document.createElement("span");
+      meta.className = "strum-meta";
+      meta.textContent = `${strum.bpm} bpm`;
+      body.appendChild(meta);
+    }
+    const edit = document.createElement("button");
+    edit.textContent = "✎ Edit";
+    edit.addEventListener("click", () => openStrumEditor([...strum.pattern], strum.bpm));
+    body.appendChild(edit);
+  } else {
+    const add = document.createElement("button");
+    add.textContent = "＋ Add strumming pattern";
+    add.addEventListener("click", () =>
+      openStrumEditor(["D", "U", "D", "U", "-", "U", "D", "U"], null));
+    body.appendChild(add);
+  }
+}
+
+function openStrumEditor(pattern, bpm) {
+  const body = document.getElementById("strum-body");
+  body.replaceChildren();
+  body.appendChild(strumRow(pattern, true));
+  const bpmInput = document.createElement("input");
+  bpmInput.type = "number";
+  bpmInput.min = 20; bpmInput.max = 300;
+  bpmInput.placeholder = "bpm";
+  if (bpm) bpmInput.value = bpm;
+  const save = document.createElement("button");
+  save.className = "on";
+  save.textContent = "Save";
+  save.addEventListener("click", async () => {
+    try {
+      const r = await fetch(`/api/strum/${videoId}`, { method: "POST",
+        body: JSON.stringify({ pattern, bpm: +bpmInput.value || null }) });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      const s = allSongs.find(x => x.video_id === videoId);
+      if (s) s.strum = { pattern, ...(+bpmInput.value ? { bpm: +bpmInput.value } : {}) };
+      renderStrum();
+    } catch (err) { alert(`Couldn't save: ${err.message}`); }
+  });
+  const clear = document.createElement("button");
+  clear.textContent = "Remove";
+  clear.addEventListener("click", async () => {
+    await fetch(`/api/strum/${videoId}`, { method: "POST",
+      body: JSON.stringify({ pattern: null }) });
+    const s = allSongs.find(x => x.video_id === videoId);
+    if (s) s.strum = null;
+    renderStrum();
+  });
+  const cancel = document.createElement("button");
+  cancel.textContent = "Cancel";
+  cancel.addEventListener("click", renderStrum);
+  body.append(bpmInput, save, clear, cancel);
+}
+
+document.getElementById("capo-note").addEventListener("click", async () => {
+  const current = allSongs.find(s => s.video_id === videoId);
+  if (!current) return;
+  const v = prompt("Capo fret on this recording (0 = none):", current.capo || 0);
+  if (v === null) return;
+  const capo = Math.max(0, Math.min(11, +v || 0));
+  if (capo === (current.capo || 0)) return;
+  if (!confirm(`Re-detect chords with capo ${capo}? Hand-edited chords and the ` +
+               `simplify backup for this song will be replaced.`)) return;
+  try {
+    const r = await fetch(`/api/capo/${videoId}`, {
+      method: "POST", body: JSON.stringify({ capo }) });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    pollJob(videoId, songDisplayTitle(current));
+  } catch (err) {
+    alert(`Couldn't change the capo: ${err.message}`);
+  }
+});
+
+async function loadSongs() {
+  allSongs = await DS.listSongs();
+  buildSongOptions();
+  updateCapoNote();
+  updateHeader();
+  const current = allSongs.find(s => s.video_id === videoId);
+  if (current) setSimplifyState(current.simplified);
+  if (!videoId) {
+    const first = allSongs.find(s => s.ready);
+    if (first) { switchSong(first.video_id, { push: true }); return; }
+    statusEl.hidden = false;
+    statusEl.textContent = "No songs yet - paste a YouTube URL above to add one.";
+  }
+  // Resume polling for jobs already running (e.g. after a page refresh).
+  allSongs.filter(s => s.state && s.state !== "error")
+          .forEach(s => pollJob(s.video_id, s.title));
+  // Songs whose processing was interrupted (audio only): offer to finish.
+  allSongs.filter(s => !s.ready && !s.state).forEach(offerResume);
+}
+
+function offerResume(s) {
+  const title = songDisplayTitle(s);
+  const line = jobLine(s.video_id);
+  line.replaceChildren();
+  line.appendChild(document.createTextNode(`⏸ ${title} is downloaded but not processed — `));
+  const a = document.createElement("a");
+  a.href = "#";
+  a.textContent = "finish processing";
+  a.addEventListener("click", async e => {
+    e.preventDefault();
+    const capo = +(prompt("Capo fret on this recording (0 = none):", s.capo || 0) ?? 0) || 0;
+    line.textContent = `${title}: requesting…`;
+    try {
+      const r = await fetch(`/api/process/${s.video_id}`, {
+        method: "POST", body: JSON.stringify({ capo }) });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      pollJob(s.video_id, title);
+    } catch (err) {
+      line.textContent = `✗ Couldn't process ${title}: ${err.message}`;
+    }
+  });
+  line.appendChild(a);
+}
+songSearch.addEventListener("input", () => { buildSongOptions(); songResults.hidden = false; });
+
+// Each processing song gets its own status line so parallel adds don't
+// overwrite each other.
+function jobLine(key) {
+  const id = "job-" + key.replace(/[^A-Za-z0-9_-]/g, "");
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = id;
+    addStatus.appendChild(el);
+  }
+  return el;
+}
+
+// Live progress bar for a running pipeline job. Reuses the existing bar
+// element so the CSS width transition animates instead of restarting.
+function renderJobProgress(line, title, s) {
+  const waiting = s.state === "waiting in line";
+  const label = waiting && s.queue_position
+    ? `waiting in line (#${s.queue_position})` : s.state;
+  let fill = line.querySelector(".job-fill");
+  if (!fill) {
+    line.replaceChildren();
+    const head = document.createElement("div");
+    head.className = "job-head";
+    const left = document.createElement("span");
+    const pct = document.createElement("span");
+    pct.className = "pct";
+    head.append(left, pct);
+    const bar = document.createElement("div");
+    bar.className = "job-bar";
+    fill = document.createElement("div");
+    fill.className = "job-fill";
+    bar.appendChild(fill);
+    line.append(head, bar);
+  }
+  line.querySelector(".job-head span").textContent = `${title} · ${label}`;
+  line.querySelector(".pct").textContent =
+    waiting || s.percent == null ? "" : `${s.percent}%`;
+  fill.classList.toggle("waiting", waiting);
+  if (!waiting) fill.style.width = `${s.percent || 0}%`;
+}
+
+const polling = new Set();
+function pollJob(vid, title) {
+  if (polling.has(vid)) return;
+  polling.add(vid);
+  const line = jobLine(vid);
+  const tick = async () => {
+    let s;
+    try { s = await (await fetch(`/api/status/${vid}`)).json(); }
+    catch { s = { state: "error", detail: "server unreachable" }; }
+    if (s.state === "done") {
+      line.replaceChildren();
+      polling.delete(vid);
+      await loadSongsListOnly();
+      if (vid === videoId) {
+        // job finished on the song being viewed (e.g. capo change):
+        // refresh in place instead of offering a link.
+        await reloadData();
+        updateCapoNote();
+        const song = allSongs.find(x => x.video_id === vid);
+        if (song) setSimplifyState(song.simplified);
+        line.textContent = `✓ ${title} updated`;
+        setTimeout(() => { if (line.textContent === `✓ ${title} updated`) line.remove(); }, 6000);
+      } else {
+        const a = document.createElement("a");
+        a.href = `?v=${vid}`;
+        a.textContent = `✓ ${title} is ready - click to open`;
+        a.addEventListener("click", e => { e.preventDefault(); switchSong(vid); });
+        line.appendChild(a);
+      }
+    } else if (s.state === "error") {
+      line.textContent = `✗ ${title} failed: ${s.detail || "unknown error"}`;
+      polling.delete(vid);
+      loadSongsListOnly();
+    } else {
+      renderJobProgress(line, title, s);
+      setTimeout(tick, 1000);
+    }
+  };
+  tick();
+}
+
+async function loadSongsListOnly() {
+  allSongs = await DS.listSongs();
+  buildSongOptions();
+}
+
+// ---- add-songs modal ----
+
+const modalBackdrop = document.getElementById("modal-backdrop");
+const addRowsEl = document.getElementById("add-rows");
+
+function addAddRow() {
+  const row = document.createElement("div");
+  row.className = "add-row";
+  const url = document.createElement("input");
+  url.type = "text";
+  url.placeholder = "YouTube URL…";
+  const capoField = document.createElement("label");
+  capoField.className = "capo-field";
+  capoField.appendChild(document.createTextNode("Capo"));
+  const capo = document.createElement("input");
+  capo.type = "number";
+  capo.min = 0; capo.max = 11; capo.value = 0;
+  capo.title = "Capo fret on the recording (0 = none)";
+  capoField.appendChild(capo);
+  const rm = document.createElement("button");
+  rm.className = "remove-row";
+  rm.textContent = "✕";
+  rm.title = "Remove this row";
+  rm.addEventListener("click", () => {
+    if (addRowsEl.children.length > 1) row.remove();
+    else url.value = "";
+  });
+  row.append(url, capoField, rm);
+  addRowsEl.appendChild(row);
+  return url;
+}
+
+function openAddModal() {
+  modalBackdrop.hidden = false;
+  if (!addRowsEl.children.length) addAddRow();
+  addRowsEl.querySelector("input").focus();
+}
+function closeAddModal() { modalBackdrop.hidden = true; }
+
+document.getElementById("open-add-modal").addEventListener("click", openAddModal);
+document.getElementById("add-row-btn").addEventListener("click", () => addAddRow().focus());
+document.getElementById("add-cancel-btn").addEventListener("click", closeAddModal);
+modalBackdrop.addEventListener("click", e => { if (e.target === modalBackdrop) closeAddModal(); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !modalBackdrop.hidden) closeAddModal();
+});
+
+async function submitAdd(url, capo) {
+  const line = jobLine(url);
+  line.textContent = `Looking up ${url}…`;
+  try {
+    const r = await fetch("/api/add", { method: "POST",
+                                        body: JSON.stringify({ url, capo }) });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    line.remove();
+    if (j.state === "done") {          // already in the library
+      const done = jobLine(j.video_id);
+      done.replaceChildren();
+      const a = document.createElement("a");
+      a.href = `?v=${j.video_id}`;
+      a.textContent = `✓ ${j.title} is already in your library - click to open`;
+      a.addEventListener("click", e => { e.preventDefault(); switchSong(j.video_id); });
+      done.appendChild(a);
+      loadSongsListOnly();
+    } else {
+      loadSongsListOnly();
+      pollJob(j.video_id, j.title);
+    }
+  } catch (err) {
+    line.textContent = `✗ Couldn't add ${url}: ${err.message}`;
+  }
+}
+
+document.getElementById("add-submit-btn").addEventListener("click", async () => {
+  const rows = [...addRowsEl.querySelectorAll(".add-row")]
+    .map(r => ({ url: r.querySelector("input[type=text]").value.trim(),
+                 capo: +r.querySelector("input[type=number]").value || 0 }))
+    .filter(r => r.url);
+  if (!rows.length) return;
+  closeAddModal();
+  addRowsEl.replaceChildren();
+  for (const r of rows) await submitAdd(r.url, r.capo);
+});
+
+// ======================= Queue / autoplay =======================
+
+let queue = [];
+try { queue = JSON.parse(localStorage.getItem("cf-queue") || "[]"); } catch {}
+let countdownTimer = null;
+
+function saveQueue() { localStorage.setItem("cf-queue", JSON.stringify(queue)); }
+
+function renderQueue() {
+  document.getElementById("queue-count").textContent = queue.length;
+  const items = document.getElementById("queue-items");
+  items.replaceChildren();
+  if (!queue.length) {
+    const empty = document.createElement("span");
+    empty.style.color = "var(--dim)";
+    empty.style.fontSize = "0.85rem";
+    empty.textContent = "Nothing queued.";
+    items.appendChild(empty);
+  }
+  queue.forEach((vid, i) => {
+    const s = allSongs.find(x => x.video_id === vid);
+    const pill = document.createElement("span");
+    pill.className = "queue-pill";
+    const n = document.createElement("span");
+    n.className = "n";
+    n.textContent = i + 1;
+    pill.appendChild(n);
+    pill.appendChild(document.createTextNode(s ? songDisplayTitle(s) : vid));
+    const x = document.createElement("button");
+    x.textContent = "✕";
+    x.title = "Remove from queue";
+    x.addEventListener("click", () => { queue.splice(i, 1); saveQueue(); renderQueue(); });
+    pill.appendChild(x);
+    items.appendChild(pill);
+  });
+}
+
+function buildQueueAddOptions() {
+  const sel = document.getElementById("queue-add-select");
+  sel.replaceChildren();
+  allSongs.filter(s => s.ready).forEach(s => {
+    const o = document.createElement("option");
+    o.value = s.video_id;
+    o.textContent = songDisplayTitle(s) + (s.artist ? ` — ${s.artist}` : "");
+    sel.appendChild(o);
+  });
+  renderQueue();   // pill titles may resolve now that allSongs is loaded
+}
+
+document.getElementById("queue-add-btn").addEventListener("click", () => {
+  const vid = document.getElementById("queue-add-select").value;
+  if (!vid) return;
+  queue.push(vid);
+  saveQueue();
+  renderQueue();
+  document.getElementById("queue-panel").open = true;
+});
+document.getElementById("queue-clear-btn").addEventListener("click", () => {
+  queue = [];
+  saveQueue();
+  renderQueue();
+});
+
+function cancelCountdown() {
+  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  document.getElementById("queue-status").replaceChildren();
+}
+
+function startNextCountdown() {
+  if (!queue.length || countdownTimer) return;
+  const nextId = queue[0];
+  const s = allSongs.find(x => x.video_id === nextId);
+  const title = s ? songDisplayTitle(s) : nextId;
+  const statusSpan = document.getElementById("queue-status");
+  let secs = 5;
+  const show = () => {
+    statusSpan.replaceChildren();
+    statusSpan.appendChild(document.createTextNode(` Up next: ${title} in ${secs}s`));
+    const cancel = document.createElement("button");
+    cancel.textContent = "cancel";
+    cancel.addEventListener("click", e => { e.preventDefault(); cancelCountdown(); });
+    statusSpan.appendChild(cancel);
+  };
+  show();
+  countdownTimer = setInterval(() => {
+    secs -= 1;
+    if (secs <= 0) {
+      cancelCountdown();
+      queue.shift();
+      saveQueue();
+      renderQueue();
+      switchSong(nextId, { autoplay: true });
+    } else {
+      show();
+    }
+  }, 1000);
+}
+
+// ======================= Chord-sheet import =======================
+
+const importBackdrop = document.getElementById("import-backdrop");
+const importReport = document.getElementById("import-report");
+const importApply = document.getElementById("import-apply");
+
+document.getElementById("import-open").addEventListener("click", () => {
+  importBackdrop.hidden = false;
+  importApply.disabled = true;
+  importReport.replaceChildren();
+  document.getElementById("import-text").focus();
+});
+document.getElementById("import-cancel").addEventListener("click", () => { importBackdrop.hidden = true; });
+importBackdrop.addEventListener("click", e => { if (e.target === importBackdrop) importBackdrop.hidden = true; });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !importBackdrop.hidden) importBackdrop.hidden = true;
+});
+
+async function postImport(commit) {
+  const sheet = document.getElementById("import-text").value;
+  if (!sheet.trim()) return null;
+  if (!DS.cloud) {
+    const r = await fetch(`/api/import/${videoId}`, {
+      method: "POST", body: JSON.stringify({ sheet, commit }) });
+    return r.json();
+  }
+  // Hosted: the same matcher runs here in the browser and writes to
+  // Firestore. publish.py pulls the result back to the PC later.
+  try {
+    const doc = await DS.loadSongDoc(videoId);
+    const rawWords = (doc.words || []).filter(w => !w.instrumental)
+      .map(({ chord, chord_time, wi, ...rest }) => rest);
+    const detected = doc.detected_segments || doc.chord_segments || [];
+    const { segments, report } = ImportSheet.importSheet(sheet, rawWords, detected);
+    if (commit) {
+      const combined = ImportSheet.mergeWordsChords(rawWords, segments);
+      await DS.saveImport(videoId, segments, combined);
+    }
+    return { ok: true, committed: !!commit, ...report };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+function renderImportReport(j) {
+  importReport.replaceChildren();
+  const add = (html, cls) => {
+    const d = document.createElement("div");
+    if (cls) d.className = cls;
+    d.innerHTML = html;
+    importReport.appendChild(d);
+  };
+  add(`Matched <b>${j.matched_lines}</b> of ${j.lyric_lines} sheet lines · ` +
+      `placed <b>${j.chords_placed}</b> chords · kept <b>${j.kept_detected}</b> ` +
+      `detected segments for intro/solo sections.`);
+  if (j.unmatched && j.unmatched.length)
+    add(`Couldn't match: ${j.unmatched.map(u => `"${u}"`).join(" · ")}`, "warn");
+  const songCapo = (allSongs.find(s => s.video_id === videoId) || {}).capo || 0;
+  if (j.key_offset)
+    add(`The recording sounds <b>${j.key_offset} semitone${j.key_offset > 1 ? "s" : ""}</b> ` +
+        `above this sheet — that means <b>capo ${j.key_offset}</b>. The intro/solo ` +
+        `chords have been relabelled to match the sheet, so the whole chart is in ` +
+        `one key.` + (songCapo === j.key_offset ? "" :
+        ` Set the CAPO badge to ${j.key_offset} so it shows on the song.`));
+  else if (j.sheet_capo != null && j.sheet_capo !== songCapo)
+    add(`Sheet says capo ${j.sheet_capo}, this song is set to capo ${songCapo} - ` +
+        `chords import as written in the sheet; adjust the CAPO badge if needed.`, "warn");
+
+  // Exact result: YOUR lyrics with the sheet's chords placed on them.
+  if (j.preview_lines && j.preview_lines.length) {
+    add(`This is exactly how the matched sections will look (your lyrics, ` +
+        `the sheet's chords):`);
+    const sheet = document.createElement("div");
+    sheet.id = "import-preview-sheet";
+    j.preview_lines.forEach(pl => {
+      const lineEl = document.createElement("div");
+      lineEl.className = "p-line";
+      const chordAt = {};
+      pl.placements.forEach(([wi, ch]) => { chordAt[wi] = ch; });
+      pl.words.forEach((w, i) => {
+        const span = document.createElement("span");
+        span.className = "p-word";
+        if (chordAt[i] !== undefined) {
+          const c = document.createElement("span");
+          c.className = "p-chord";
+          c.textContent = chordAt[i];
+          span.appendChild(c);
+        }
+        span.appendChild(document.createTextNode(w));
+        lineEl.appendChild(span);
+        lineEl.appendChild(document.createTextNode(" "));
+      });
+      sheet.appendChild(lineEl);
+    });
+    importReport.appendChild(sheet);
+  }
+}
+
+document.getElementById("import-preview").addEventListener("click", async () => {
+  try {
+    const j = await postImport(false);
+    if (!j) return;
+    if (!j.ok) throw new Error(j.error);
+    renderImportReport(j);
+    importApply.disabled = false;
+  } catch (err) {
+    importReport.innerHTML = `<div class="warn">${err.message}</div>`;
+    importApply.disabled = true;
+  }
+});
+
+importApply.addEventListener("click", async () => {
+  try {
+    const j = await postImport(true);
+    if (!j || !j.ok) throw new Error(j ? j.error : "empty sheet");
+    importBackdrop.hidden = true;
+    document.getElementById("import-text").value = "";
+    await reloadData();
+    setSimplifyState(false);   // import replaces the simplify backup
+  } catch (err) {
+    importReport.innerHTML = `<div class="warn">${err.message}</div>`;
+  }
+});
+
+// ======================= Simplify toggle =======================
+
+const simplifyToggle = document.getElementById("simplify-toggle");
+function setSimplifyState(simplified) {
+  simplifyToggle.classList.toggle("on", simplified);
+  simplifyToggle.textContent = simplified ? "♮ Restore full chords" : "♭ Simplify";
+}
+simplifyToggle.addEventListener("click", async () => {
+  const simplifying = !simplifyToggle.classList.contains("on");
+  if (simplifying && !confirm(
+      "Simplify every chord to its basic shape (Em7→Em, Dsus4→D)?\n" +
+      "The detailed labels are backed up - this same button restores them.")) return;
+  simplifyToggle.disabled = true;
+  try {
+    const r = await fetch(`/api/simplify/${videoId}`, { method: "POST" });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    setSimplifyState(j.simplified);
+    const s = allSongs.find(x => x.video_id === videoId);
+    if (s) s.simplified = j.simplified;
+    await reloadData();
+  } catch (err) {
+    alert(`Couldn't toggle simplify: ${err.message}`);
+  }
+  simplifyToggle.disabled = false;
+});
+
+// ======================= Lyrics rendering =======================
+
+function renderWordContent(span, w) {
+  span.replaceChildren();
+  if (w.chord) {
+    const c = document.createElement("span");
+    c.className = "chord";
+    c.textContent = w.chord;
+    span.appendChild(c);
+  } else if (editMode && !w.instrumental) {
+    const c = document.createElement("span");
+    c.className = "chord placeholder";
+    c.textContent = "+";
+    span.appendChild(c);
+  }
+  span.appendChild(document.createTextNode(w.word));
+}
+
+function render() {
+  let lineEl = null, lastLine = null;
+  words.forEach(w => {
+    if (w.line !== lastLine) {
+      lastLine = w.line;
+      lineEl = document.createElement("div");
+      lineEl.className = "line";
+      lyricsEl.appendChild(lineEl);
+    }
+    const span = document.createElement("span");
+    span.className = w.instrumental ? "word instrumental" : "word";
+    renderWordContent(span, w);
+    span.addEventListener("click", e => {
+      if (!editMode) {
+        // Tapping the chord label shows its shape (touch has no hover);
+        // tapping the word itself jumps the video there.
+        const chordEl = e.target.closest(".chord");
+        if (chordEl && !chordEl.classList.contains("placeholder")) {
+          showChordPop(chordEl);
+          return;
+        }
+        if (player && playerReady) { player.seekTo(w.start_time, true); player.playVideo(); }
+        return;
+      }
+      if (e.target.closest(".chord") || w.instrumental) editChord(span, w);
+      else editWord(span, w);
+    });
+    lineEl.appendChild(span);
+    lineEl.appendChild(document.createTextNode(" "));
+    wordEls.push(span);
+  });
+}
+
+// ======================= Edit mode =======================
+
+let editMode = false;
+const editToggle = document.getElementById("edit-toggle");
+function setEditMode(on) {
+  editMode = on;
+  editToggle.classList.toggle("on", editMode);
+  editToggle.textContent = editMode ? "✎ Editing… (click to finish)" : "✎ Edit";
+  document.body.classList.toggle("editing", editMode);
+  words.forEach((w, i) => renderWordContent(wordEls[i], w));
+}
+editToggle.addEventListener("click", () => setEditMode(!editMode));
+
+async function saveEdit(payload) {
+  try {
+    const r = await fetch(`/api/edit/${videoId}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok || !body.ok) throw new Error(body.error || `HTTP ${r.status}`);
+    return true;
+  } catch (err) {
+    alert(`Couldn't save the edit: ${err.message}\n\nEdits need the ChordFinder ` +
+          `server (serve.bat / serve.py), not a plain file server.`);
+    return false;
+  }
+}
+
+function inlineEdit(span, initial, onCommit) {
+  const input = document.createElement("input");
+  input.className = "inline-edit";
+  input.value = initial;
+  input.style.width = Math.max(4, initial.length + 2) + "ch";
+  span.replaceChildren(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = commit => {
+    if (done) return;
+    done = true;
+    onCommit(commit ? input.value.trim() : null);
+  };
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") finish(true);
+    else if (e.key === "Escape") finish(false);
+    e.stopPropagation();
+  });
+  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("click", e => e.stopPropagation());
+}
+
+function editWord(span, w) {
+  inlineEdit(span, w.word, async value => {
+    if (value === null || value === w.word ||
+        (value === "" && !confirm(`Delete the word "${w.word}"?`))) {
+      renderWordContent(span, w);
+      return;
+    }
+    if (await saveEdit({ type: "word", index: w.wi, word: value })) await reloadData();
+    else renderWordContent(span, w);
+  });
+}
+
+function editChord(span, w) {
+  inlineEdit(span, w.chord || "", async value => {
+    let payload = null;
+    if (value !== null && value !== (w.chord || "")) {
+      if (w.chord) {          // rename, or delete when emptied
+        payload = { type: "chord", chord_time: w.chord_time, chord: value };
+      } else if (value) {     // add a chord where none was detected
+        payload = { type: "add_chord", start_time: w.start_time,
+                    end_time: w.end_time, chord: value };
+      }
+    }
+    if (payload && await saveEdit(payload)) await reloadData();
+    else renderWordContent(span, w);
+  });
+}
+
+// ======================= Player + karaoke loop =======================
+
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player("player", {
+    videoId: videoId || undefined,
+    width: 640,
+    height: 360,
+    playerVars: { rel: 0 },
+    events: {
+      onReady: () => {
+        playerReady = true;
+        // Playlist hand-off from the Songs tab: ?autoplay=1 starts playback
+        // (browsers may still require one click if there was no gesture).
+        if (new URLSearchParams(location.search).get("autoplay") === "1")
+          player.playVideo();
+      },
+      onStateChange: e => {
+        if (e.data === YT.PlayerState.ENDED) startNextCountdown();
+        if (e.data === YT.PlayerState.PLAYING) cancelCountdown();
+      },
+    },
+  });
+}
+
+const GRACE_SECONDS = 2.0;
+let lastHudChord = null;
+let chordChanges = [];   // [{t, chord}] for the next-chord countdown
+setInterval(() => {
+  if (!player || !player.getCurrentTime || words.length === 0) return;
+  const t = player.getCurrentTime();
+
+  // last word with start_time <= t (binary search)
+  let lo = 0, hi = words.length - 1, idx = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (words[mid].start_time <= t) { idx = mid; lo = mid + 1; }
+    else { hi = mid - 1; }
+  }
+  if (idx >= 0 && t > words[idx].end_time + GRACE_SECONDS) idx = -1;
+
+  if (idx !== activeIdx) {
+    if (activeIdx >= 0 && wordEls[activeIdx]) wordEls[activeIdx].classList.remove("active");
+    if (idx >= 0) {
+      wordEls[idx].classList.add("active");
+      // Keep the active word centred in the space BELOW the sticky player
+      // (plain scrollIntoView centres on the viewport, which can put the
+      // word behind the video). Skip while the user is editing labels.
+      if (!editMode) {
+        // In the wide two-column layout the lyrics have the full viewport
+        // height; when stacked, centre in the strip below the sticky player.
+        const wide = matchMedia("(min-width: 1100px)").matches;
+        const stickyBottom = wide ? 0 :
+          document.getElementById("player-wrap").getBoundingClientRect().bottom;
+        const r = wordEls[idx].getBoundingClientRect();
+        const target = stickyBottom + (innerHeight - stickyBottom) / 2;
+        const delta = r.top + r.height / 2 - target;
+        if (Math.abs(delta) > 4) window.scrollBy({ top: delta, behavior: "smooth" });
+      }
+    }
+    activeIdx = idx;
+  }
+
+  // Current-chord readout + live diagram + strip highlight.
+  let chord = "";
+  for (let i = idx; i >= 0; i--) {
+    if (words[i].chord) { chord = words[i].chord; break; }
+  }
+  if (chord !== lastHudChord) {
+    lastHudChord = chord;
+    document.getElementById("current-chord").textContent = chord;
+    document.querySelectorAll(".chord-card").forEach(c =>
+      c.classList.toggle("now", c.dataset.chord === chord));
+  }
+
+  // Countdown to the next chord change (seconds, one decimal).
+  const nextEl = document.getElementById("next-chord");
+  const next = chordChanges.find(c => c.t > t + 0.05 && c.chord !== chord);
+  if (next) {
+    const secs = (next.t - t).toFixed(1);
+    nextEl.innerHTML = `next <b>${next.chord}</b> in <span class="secs">${secs}s</span>`;
+    nextEl.hidden = false;
+  } else {
+    nextEl.hidden = true;
+  }
+}, 100);
+
+// ======================= Keyboard shortcuts =======================
+
+document.addEventListener("keydown", e => {
+  if (e.target.closest("input, select, textarea") || !player || !playerReady) return;
+  if (e.code === "Space") {
+    e.preventDefault();
+    player.getPlayerState() === YT.PlayerState.PLAYING ? player.pauseVideo() : player.playVideo();
+  } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    e.preventDefault();
+    const d = e.key === "ArrowLeft" ? -5 : 5;
+    player.seekTo(Math.max(0, player.getCurrentTime() + d), true);
+  }
+});
+
+// ======================= Boot =======================
+
+// Hosted (iPad) mode is read-only: the pipeline and the JSON files live on
+// the PC, so anything that writes is hidden rather than left to fail.
+function applyReadOnly() {
+  // Import works in the hosted app too, but only for the owner account.
+  const hide = ["open-add-modal", "edit-toggle", "simplify-toggle"];
+  if (!DS.isOwner) hide.push("import-open");
+  hide.forEach(id => { const el = document.getElementById(id); if (el) el.hidden = true; });
+  const capo = document.getElementById("capo-note");
+  if (capo) { capo.style.cursor = "default"; capo.dataset.readonly = "1"; }
+  document.body.dataset.readonly = "1";
+}
+
+(async () => {
+  try {
+    await DS.init();
+  } catch (err) {
+    statusEl.hidden = false;
+    statusEl.textContent = `Couldn't reach the song library: ${err.message}`;
+    return;
+  }
+  if (DS.readOnly) applyReadOnly();
+  if (videoId) {
+    try {
+      await reloadData();
+    } catch (err) {
+      statusEl.hidden = false;
+      statusEl.textContent = DS.cloud
+        ? `That song isn't published yet - run publish.py on the PC.`
+        : `Couldn't load songs/${videoId}/combined.json - did you run the ` +
+          `pipeline for this video, and open this page via the local server ` +
+          `(not file://)?`;
+    }
+  }
+  await loadSongs();
+  renderQueue();
+})();
+</script>
+<script src="https://www.youtube.com/iframe_api" async></script>
+</body>
+</html>
